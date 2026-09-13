@@ -569,15 +569,6 @@ async function sendMessage() {
          * LangGraph actually returned true.
          */
 
-        console.log(
-            "TripMate API response:",
-            data
-        );
-
-        console.log(
-            "Requires approval:",
-            data.requires_approval
-        );
 
 
         /*
@@ -724,12 +715,6 @@ async function submitApproval(
         localStorage.setItem(
             "travel_thread_id",
             currentThreadId
-        );
-
-
-        console.log(
-            "TripMate approval response:",
-            data
         );
 
 

@@ -533,9 +533,3 @@ def search_flights(query: str, limit: int = 10):
     formatted_flights = [format_flight(flight) for flight in flight_data[:limit]]
 
     return f"{route_info}\n\n" + "\n\n---\n\n".join(formatted_flights)
-
-
-if __name__ == "__main__":
-    print(search_flights("Plan a 7 days Japan trip from Bangladesh"))
-    print("\n" + "=" * 80 + "\n")
-    print(search_flights("all country flight info"))

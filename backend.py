@@ -1143,10 +1143,6 @@ def flight_agent(
     state: TravelState
 ):
 
-    print(
-        "\nINSIDE FLIGHT AGENT\n"
-    )
-
     query = state["user_query"]
 
     constraints = state.get(
@@ -1568,7 +1564,7 @@ Forecast:
 
 
 def budget_agent(state: TravelState):
-    print("INSIDE BUDGET AGENT")
+    
 
     prompt = f"""
 Create a travel budget using ONLY information explicitly contained
