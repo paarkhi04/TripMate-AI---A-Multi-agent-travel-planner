@@ -368,8 +368,13 @@ Valid requests can include:
 Block clearly unrelated requests and requests asking for
 harmful or illegal instructions.
 
-Do not block a valid travel request merely because some
+A request can be a valid travel request even if some
 details are missing.
+
+However, if the request is too vague to identify ANY
+destination or travel-related objective, it should be
+allowed through the guardrail but handled as an
+incomplete travel request.
 
 Return strict JSON only:
 
@@ -523,18 +528,42 @@ Available agents:
 
 - itinerary_agent:
   creates the integrated travel plan
-  and must always be included
+  and must always be included.
+
+IMPORTANT INCOMPLETE-REQUEST RULE:
+
+First extract the travel constraints.
+
+If the request does NOT contain a usable
+destination, DO NOT call any specialist
+travel agents.
+
+For example:
+
+"I want to travel somewhere."
+
+must NOT trigger:
+
+- flight_agent
+- hotel_agent
+- weather_agent
+- budget_agent
+- itinerary_agent
+
+Instead, return an empty selected_agents
+list and explain that a destination is
+required before a travel plan can be created.
+
+Do NOT invent or guess a destination.
+
+If a destination IS provided, select the
+appropriate specialist agents and always
+include itinerary_agent.
 
 Return strict JSON only using this schema:
 
 {{
-  "selected_agents": [
-    "flight_agent",
-    "hotel_agent",
-    "weather_agent",
-    "budget_agent",
-    "itinerary_agent"
-  ],
+  "selected_agents": [],
   "trip_constraints": {{
     "destination": "",
     "origin": "",
@@ -584,17 +613,6 @@ User request:
 
         ]
 
-        # Itinerary must always be included.
-
-        if (
-            "itinerary_agent"
-            not in selected_agents
-        ):
-
-            selected_agents.append(
-                "itinerary_agent"
-            )
-
         constraints = (
             _empty_constraints()
         )
@@ -611,6 +629,74 @@ User request:
 
             constraints.update(
                 parsed_constraints
+            )
+
+        destination = str(
+            constraints.get(
+                "destination",
+                ""
+            )
+        ).strip()
+
+        # ----------------------------------------------------
+        # MISSING DESTINATION
+        # ----------------------------------------------------
+
+        if not destination:
+
+            selected_agents = []
+
+            reasoning = (
+                "A destination is required before "
+                "TripMate AI can create a travel plan. "
+                "Please provide a destination."
+            )
+
+            return {
+
+                "guardrail_allowed":
+                    True,
+
+                "guardrail_reason":
+                    guardrail_reason,
+
+                "selected_agents":
+                    [],
+
+                "trip_constraints":
+                    constraints,
+
+                "supervisor_reasoning":
+                    reasoning,
+
+                "final_response":
+                    reasoning,
+
+                "messages": [
+
+                    AIMessage(
+
+                        content=reasoning
+
+                    )
+
+                ],
+
+                "llm_calls":
+                    llm_calls + 1,
+
+            }
+
+        # Itinerary must always be included
+        # for a valid destination-based request.
+
+        if (
+            "itinerary_agent"
+            not in selected_agents
+        ):
+
+            selected_agents.append(
+                "itinerary_agent"
             )
 
         reasoning = str(
@@ -731,10 +817,27 @@ def guardrail_blocked_agent(
 
     }
 
+# ============================================================
+# INCOMPLETE TRAVEL REQUEST
+# ============================================================
 
-# ============================================================
-# FLIGHT AGENT
-# ============================================================
+def incomplete_request_agent(
+    state: TravelState
+):
+    reason = (
+        "A destination is required before "
+        "TripMate AI can create a travel plan. "
+        "Please provide a destination."
+    )
+
+    return {
+        "final_response": reason,
+        "messages": [
+            AIMessage(
+                content=reason
+            )
+        ],
+    }
 
 
 # ============================================================
@@ -1342,11 +1445,9 @@ def hotel_agent(
 
         hotel_results = (
 
-            "Live hotel search is temporarily "
-            "unavailable. Provide general "
-            "accommodation and neighborhood "
-            "guidance based on the destination "
-            "and clearly label it as non-live advice."
+            "Live hotel search is temporarily unavailable. "
+            "No verified hotel information is available "
+            "from the connected travel data."
 
         )
 
@@ -1470,8 +1571,8 @@ def budget_agent(state: TravelState):
     print("INSIDE BUDGET AGENT")
 
     prompt = f"""
-Create a practical estimated travel budget based on the information
-provided by the specialist agents.
+Create a travel budget using ONLY information explicitly contained
+in the specialist-agent results below.
 
 User Query:
 {state['messages'][0].content}
@@ -1488,60 +1589,101 @@ Hotel Results:
 Weather Results:
 {_compact_text(state.get('weather_results', ''), 1000)}
 
-STRICT FLIGHT PRICING RULES:
-1. Flight Results are the ONLY authoritative source for flight pricing.
-2. NEVER invent a flight ticket price.
-3. NEVER estimate an airfare range.
-4. NEVER use typical airfare prices from general knowledge.
-5. NEVER create promotional airfare assumptions.
-6. NEVER calculate an airfare based on distance, airline, route, season,
-   or any other assumption.
-7. NEVER use hotel, transport, activity, or general travel estimates
-   to infer the flight price.
-8. If Flight Results do not contain an actual airfare, write exactly:
+STRICT SOURCE-GROUNDING RULES:
+
+1. Flight Results are the ONLY authoritative source for airfare.
+
+2. NEVER invent, estimate, approximate, or infer airfare.
+
+3. NEVER use general knowledge to create flight prices.
+
+4. NEVER create a return-flight price unless an actual return
+   airfare is explicitly present in Flight Results.
+
+5. If Flight Results contain no actual airfare, write exactly:
 
    "Live airfare was not provided by the connected flight data."
 
-9. Do NOT include a dollar amount beside the flight in the budget
-   when airfare is unavailable.
-10. Do NOT invent return-flight pricing when return-flight information
-    is not present.
+6. Hotel Results are the ONLY authoritative source for hotel pricing.
 
-OTHER BUDGET RULES:
-1. Hotel costs may be shown as estimates if supported by Hotel Results.
-2. Food, transportation, and activity costs may be shown as estimates.
-3. Clearly label non-flight costs as estimated, approximate, or indicative.
-4. Do not present estimates as live prices.
-5. Do not claim that any price is confirmed unless the source explicitly
-   provides a confirmed price.
+7. If Hotel Results do not contain an actual hotel price, DO NOT
+   create or estimate a hotel price.
 
-IMPORTANT:
-The user's flight request may be one-way.
-Do NOT add a return-flight cost unless return-flight information is
-explicitly provided in Flight Results.
+8. Food, transportation, activities, attractions, visa fees,
+   insurance, or miscellaneous costs MUST NOT be assigned numerical
+   prices unless an actual numerical price is explicitly present in
+   the provided specialist-agent results.
 
-Create a concise budget breakdown using these categories:
+9. NEVER use typical prices, approximate prices, market averages,
+   destination knowledge, previous experience, or assumptions to
+   create numerical costs.
 
-- Flight
-- Hotel
-- Local Transportation
-- Food
-- Activities / Attractions
-- Miscellaneous
-- Estimated Total
+10. NEVER create a numerical daily budget.
 
-For the Flight category:
-If no airfare is available, use:
+11. NEVER create a numerical total when one or more required cost
+    categories are unavailable.
 
-"Live airfare was not provided by the connected flight data."
+12. Do not convert qualitative information into numerical estimates.
 
-Do NOT replace that statement with an estimated dollar amount.
+13. If a cost category has no verified numerical price in the
+    specialist-agent results, write:
 
-For the total:
-If airfare is unavailable, do NOT calculate a misleading total that
-pretends airfare is known.
+    "No verified price was provided by the connected travel data."
 
-Instead, clearly state that the total excludes airfare.
+14. Clearly distinguish between verified prices and unavailable
+    prices.
+
+15. Do not add visa fees, health costs, insurance costs, baggage
+    costs, taxes, or other charges unless an actual price is present
+    in the provided data.
+
+16. The budget must not contain information obtained from general
+    world knowledge.
+
+BUDGET FORMAT:
+
+Flight:
+- Use the exact airfare information from Flight Results if present.
+- Otherwise write:
+  "Live airfare was not provided by the connected flight data."
+
+Hotel:
+- Use only an actual price explicitly present in Hotel Results.
+- Otherwise write:
+  "No verified price was provided by the connected travel data."
+
+Local Transportation:
+- Use only a numerical price explicitly provided by the specialist
+  data.
+- Otherwise write:
+  "No verified price was provided by the connected travel data."
+
+Food:
+- Use only a numerical price explicitly provided by the specialist
+  data.
+- Otherwise write:
+  "No verified price was provided by the connected travel data."
+
+Activities / Attractions:
+- Use only numerical prices explicitly provided by the specialist
+  data.
+- Otherwise write:
+  "No verified price was provided by the connected travel data."
+
+Miscellaneous:
+- Use only numerical prices explicitly provided by the specialist
+  data.
+- Otherwise write:
+  "No verified price was provided by the connected travel data."
+
+Estimated Total:
+- Calculate a total ONLY when all included numerical costs are
+  explicitly supported by the specialist-agent results.
+- If airfare or other required costs are unavailable, do NOT invent
+  values and do NOT calculate a misleading total.
+- Instead write:
+  "A verified total cannot be calculated because some required
+   prices were not provided by the connected travel data."
 
 Return only the budget analysis.
 """
@@ -1550,16 +1692,20 @@ Return only the budget analysis.
         [
             SystemMessage(
                 content=(
-                    "You are a careful travel budget analyst. "
-                    "You must never invent airfare, ticket prices, "
-                    "fare ranges, promotional prices, or return-flight "
-                    "costs. Flight Results are the only authoritative "
-                    "source for flight pricing. "
-                    "When airfare is unavailable, explicitly state: "
+                    "You are a strictly source-grounded travel budget "
+                    "analyst. Use ONLY numerical prices explicitly "
+                    "provided in the specialist-agent results. "
+                    "Never invent, estimate, approximate, or infer "
+                    "prices from general knowledge. "
+                    "Never invent airfare or return-flight costs. "
+                    "If airfare is unavailable, state exactly: "
                     "'Live airfare was not provided by the connected "
                     "flight data.' "
-                    "Other travel costs must be clearly labeled as "
-                    "estimates."
+                    "If another cost has no verified price, state: "
+                    "'No verified price was provided by the connected "
+                    "travel data.' "
+                    "Never calculate a total when required prices "
+                    "are unavailable."
                 )
             ),
             HumanMessage(content=prompt),
@@ -1611,7 +1757,7 @@ FLIGHT RESULTS — AUTHORITATIVE FLIGHT SOURCE
 
 
 ============================================================
-HOTEL RESULTS
+HOTEL RESULTS — AUTHORITATIVE HOTEL SOURCE
 ============================================================
 
 {_compact_text(
@@ -1624,7 +1770,7 @@ HOTEL RESULTS
 
 
 ============================================================
-WEATHER RESULTS
+WEATHER RESULTS — AUTHORITATIVE WEATHER SOURCE
 ============================================================
 
 {_compact_text(
@@ -1637,7 +1783,7 @@ WEATHER RESULTS
 
 
 ============================================================
-BUDGET RESULTS
+BUDGET RESULTS — AUTHORITATIVE BUDGET SOURCE
 ============================================================
 
 {_compact_text(
@@ -1650,148 +1796,209 @@ BUDGET RESULTS
 
 
 ============================================================
-STRICT FLIGHT RULES
+STRICT GROUNDING RULES
 ============================================================
 
-Flight Results are the ONLY authoritative source for
-flight information.
+The specialist-agent results above are the ONLY factual
+sources available to you.
 
-You MUST follow these rules:
+You MUST NOT use your own general knowledge to fill missing
+travel information.
 
-1. NEVER invent a flight number.
+You MUST NOT invent, assume, infer, or present unsupported
+travel facts as facts.
 
-2. NEVER change a flight number supplied by Flight Results.
+If information is not present in the specialist-agent results,
+omit it or clearly state:
 
-3. NEVER change the departure date.
-
-4. NEVER change the departure time.
-
-5. NEVER change the arrival date.
-
-6. NEVER change the arrival time.
-
-7. NEVER change the aircraft type when it is provided.
-
-8. NEVER change the terminal when it is provided.
-
-9. NEVER invent ticket prices.
-
-10. NEVER invent fare ranges.
-
-11. NEVER use "typical airfare" estimates.
-
-12. NEVER create promotional airfare assumptions.
-
-13. NEVER invent seat availability.
-
-14. NEVER invent booking availability.
-
-15. NEVER say that a flight is booked or confirmed unless
-    Flight Results explicitly says so.
-
-16. NEVER create return-flight details unless return-flight
-    information is explicitly present in Flight Results.
-
-17. If Flight Results do not provide airfare, write exactly:
-
-    "Live airfare was not provided by the connected flight data."
-
-18. If Flight Results contain an overnight flight, preserve
-    the next-day arrival date exactly as provided.
-
-For example:
-
-22:00 (29 Oct) → 01:05 (30 Oct)
-
-MUST remain:
-
-22:00 (29 Oct) → 01:05 (30 Oct)
-
-Do NOT change the arrival date to another date.
+"Information was not available from the connected travel data."
 
 
 ============================================================
-IMPORTANT ONE-WAY REQUEST RULE
+FLIGHT RULES
 ============================================================
 
-If the user requested only a one-way journey, do NOT create
-a return flight.
+Flight Results are the ONLY authoritative source for flights.
 
-Do NOT write things such as:
+- Use ONLY flights explicitly provided by Flight Agent.
+- NEVER invent a flight number.
+- NEVER invent an airline.
+- NEVER add alternative airlines.
+- NEVER change a departure date.
+- NEVER change a departure time.
+- NEVER change an arrival date.
+- NEVER change an arrival time.
+- NEVER change an aircraft type.
+- NEVER change a terminal.
+- NEVER invent a flight duration.
+- NEVER invent ticket prices.
+- NEVER create a fare range.
+- NEVER create a typical airfare estimate.
+- NEVER invent seat availability.
+- NEVER invent booking availability.
+- NEVER claim that a flight is booked or confirmed.
+- NEVER create a return flight unless return-flight data is
+  explicitly present in Flight Results.
+- NEVER turn an outbound flight into a return flight.
 
-"Flight back to Dhaka"
+If Flight Results contain an overnight flight, preserve its
+exact next-day arrival date.
 
-"Return flight"
-
-"Round-trip flight"
-
-unless actual return-flight data is present in Flight Results.
-
-
-============================================================
-FLIGHT BUDGET RULE
-============================================================
-
-The itinerary MUST NOT create a numerical flight price.
-
-Even if Budget Results contain a flight-price estimate,
-do NOT repeat that estimate as a flight price.
-
-Flight pricing must come exclusively from Flight Results.
-
-If Flight Results contain no airfare, use exactly:
+If Flight Results do not contain airfare, write exactly:
 
 "Live airfare was not provided by the connected flight data."
 
 
 ============================================================
-OTHER COST RULES
+HOTEL RULES
 ============================================================
 
-Hotel, food, transportation, and activity costs may be
-included only as estimates.
+Hotel Results are the ONLY authoritative source for hotel
+information.
 
-Clearly label these costs as:
+- Use ONLY hotels explicitly provided by Hotel Agent.
+- Do NOT invent hotel names.
+- Do NOT invent hotel amenities.
+- Do NOT invent hotel ratings.
+- Do NOT invent hotel prices.
+- Do NOT invent hotel availability.
+- Do NOT invent hotel locations or neighborhood claims.
+- Do NOT claim that breakfast, Wi-Fi, pools, gyms, restaurants,
+  or other amenities are available unless explicitly stated in
+  Hotel Results.
 
-- Estimated
-- Approximate
-- Indicative
+If Hotel Results do not contain usable hotel information, say:
 
-Do NOT present estimates as confirmed live prices.
-
-Do not invent unsupported prices merely to complete a
-budget table.
-
-
-============================================================
-FACTUAL GROUNDING RULE
-============================================================
-
-Use the specialist-agent results as source information.
-
-Do NOT add unsupported factual claims about:
-
-- airline benefits
-- baggage allowances
-- visa requirements
-- health requirements
-- airport operations
-- hotel amenities
-- hotel availability
-- restaurant availability
-- attraction opening times
-- booking availability
-- ticket prices
-
-unless those facts are explicitly supported by the
-provided specialist results.
-
-The itinerary should summarize available information
-rather than invent new facts.
+"Information was not available from the connected travel data."
 
 
 ============================================================
-ITINERARY
+WEATHER RULES
+============================================================
+
+Weather Results are the ONLY authoritative source for weather.
+
+- Use ONLY weather information provided by Weather Agent.
+- Do NOT generate seasonal weather information from general
+  knowledge.
+- Do NOT predict weather outside the supplied forecast period.
+- Do NOT describe October weather unless Weather Results
+  explicitly contain October data.
+- Do NOT present current weather as the forecast for the
+  user's future travel dates.
+- Clearly state when the requested travel-date forecast is
+  unavailable.
+
+
+============================================================
+ACTIVITY RULES
+============================================================
+
+Activities may be included as itinerary suggestions.
+
+However:
+
+- Do NOT present attraction prices unless provided by a
+  specialist agent.
+- Do NOT present attraction opening hours unless provided by
+  a specialist agent.
+- Do NOT claim attraction availability.
+- Do NOT claim booking availability.
+- Do NOT claim that tickets are available.
+- Do NOT claim that an activity is pre-booked.
+- Do NOT invent transportation prices.
+- Do NOT invent restaurant prices.
+- Do NOT invent restaurant availability.
+
+When information is unavailable, keep the activity as a
+general planning suggestion without unsupported factual
+details.
+
+For example, write:
+
+"Consider visiting a major Dubai attraction."
+
+NOT:
+
+"Visit Burj Khalifa at 10 AM and purchase a $45 ticket."
+
+
+============================================================
+VISA / HEALTH / ENTRY RULES
+============================================================
+
+Do NOT provide visa, immigration, entry, vaccination, health,
+or travel-restriction information unless it is explicitly
+present in the specialist-agent results.
+
+Do NOT write statements such as:
+
+- "You need a UAE visa."
+- "Visa on arrival is available."
+- "Apply for an e-visa."
+- "Check COVID requirements."
+- "Vaccination is required."
+
+If such information is not available, omit it.
+
+
+============================================================
+BUDGET RULES
+============================================================
+
+Use Budget Results as the source for budget figures.
+
+- Keep all non-flight costs clearly labeled as estimates.
+- Do NOT invent airfare.
+- Do NOT create round-trip airfare.
+- Do NOT create a return-flight cost.
+- Do NOT introduce numerical flight prices from general
+  knowledge.
+- Do NOT repeat an unsupported flight price from Budget Results.
+- Flight pricing must come exclusively from Flight Results.
+
+If Flight Results contain no airfare, state exactly:
+
+"Live airfare was not provided by the connected flight data."
+
+The estimated total MUST exclude airfare when airfare is
+unavailable.
+
+
+============================================================
+RECOMMENDATION RULES
+============================================================
+
+Final recommendations must be based only on information
+already provided by the specialist agents.
+
+Do NOT use recommendations as a way to introduce unsupported
+facts.
+
+For example:
+
+Allowed:
+"Verify current flight schedules before booking."
+
+Not allowed:
+"Book Emirates for the best baggage allowance."
+
+Allowed:
+"Check current hotel listings that match your mid-range
+preference."
+
+Not allowed:
+"Choose a 4-star hotel with free Wi-Fi and breakfast."
+
+Allowed:
+"Check the weather forecast closer to the travel date."
+
+Not allowed:
+"October will be warm and sunny."
+
+
+============================================================
+ITINERARY FORMAT
 ============================================================
 
 Create a practical draft itinerary suitable for human review.
@@ -1808,23 +2015,42 @@ Use these sections:
 
 Keep the draft concise and easy to follow.
 
-For the Flight Information section, reproduce the available
-flight information accurately.
+The draft must summarize available specialist-agent data
+rather than create new factual information.
 
-For the Estimated Budget section:
 
-- Do NOT invent airfare.
-- Do NOT create a round-trip airfare.
-- Do NOT create a return-flight cost.
-- If airfare is unavailable, explicitly state:
+============================================================
+FINAL SAFETY CHECK
+============================================================
 
-  "Live airfare was not provided by the connected flight data."
+Before producing the answer, check the entire itinerary.
 
-If airfare is unavailable, do not calculate a misleading
-total that includes an imaginary airfare.
+Remove any statement that introduces information not contained
+in the specialist-agent results.
 
-Instead, clearly state that the estimated total excludes
-airfare.
+In particular, remove:
+
+- unsupported airline names
+- unsupported flight details
+- unsupported airfare
+- unsupported hotel amenities
+- unsupported hotel prices
+- unsupported visa claims
+- unsupported health claims
+- unsupported baggage claims
+- unsupported attraction prices
+- unsupported attraction hours
+- unsupported booking claims
+- unsupported availability claims
+- unsupported seasonal weather claims
+- unsupported travel restrictions
+
+When in doubt, OMIT the claim.
+
+
+============================================================
+END OF INSTRUCTIONS
+============================================================
 """
 
     response = llm.invoke(
@@ -1832,18 +2058,21 @@ airfare.
             SystemMessage(
                 content=(
                     "You are an expert AI travel itinerary planner. "
-                    "You must strictly follow specialist-agent data. "
-                    "Flight Results are the only authoritative source "
-                    "for flight information and airfare. "
-                    "Never invent flight numbers, dates, times, "
-                    "aircraft, terminals, ticket prices, fare ranges, "
-                    "seat availability, booking status, or return "
-                    "flights. "
+                    "Use ONLY the information provided by the "
+                    "specialist agents. Do not use general world "
+                    "knowledge to fill missing information. "
+                    "Never invent flights, airlines, flight dates, "
+                    "times, aircraft, terminals, airfare, hotel "
+                    "amenities, hotel prices, visa requirements, "
+                    "health requirements, baggage policies, "
+                    "attraction prices, opening hours, booking "
+                    "availability, or seasonal weather information. "
+                    "If information is unavailable, omit it or state: "
+                    "'Information was not available from the connected "
+                    "travel data.' "
                     "If airfare is unavailable, state exactly: "
                     "'Live airfare was not provided by the connected "
-                    "flight data.' "
-                    "Other travel costs must be clearly labeled as "
-                    "estimates."
+                    "flight data.'"
                 )
             ),
             HumanMessage(
@@ -1860,38 +2089,26 @@ airfare.
     )
 
     return {
-        "itinerary":
-            response.content,
+        "itinerary": response.content,
 
-        "approval_request":
-            approval_request,
+        "approval_request": approval_request,
 
         "messages": [
-
             AIMessage(
-
                 content=(
-
                     "Draft itinerary created "
                     "for human review."
-
                 )
-
             )
-
         ],
 
         "llm_calls": (
-
             state.get(
                 "llm_calls",
                 0
             ) + 1
-
         ),
-
     }
-
 # ============================================================
 # HUMAN-IN-THE-LOOP APPROVAL
 # ============================================================
@@ -2265,6 +2482,9 @@ ROUTE_MAP = {
     "guardrail_blocked":
         "guardrail_blocked",
 
+    "incomplete_request":
+        "incomplete_request",
+
     "flight_agent":
         "flight_agent",
 
@@ -2318,15 +2538,16 @@ def route_from_supervisor(
         state
     )
 
-    return (
+    # No destination / incomplete travel request.
+    # The supervisor intentionally selected no agents.
+    # Route directly to the end instead of running
+    # itinerary generation or Human-in-the-Loop approval.
 
-        selected[0]
+    if not selected:
 
-        if selected
+        return "incomplete_request"
 
-        else "itinerary_agent"
-
-    )
+    return selected[0]
 
 
 def route_after_agent(
@@ -2381,6 +2602,11 @@ graph.add_node(
 graph.add_node(
     "guardrail_blocked",
     guardrail_blocked_agent
+)
+
+graph.add_node(
+    "incomplete_request",
+    incomplete_request_agent
 )
 
 
@@ -2500,6 +2726,11 @@ graph.add_edge(
 
 graph.add_edge(
     "guardrail_blocked",
+    END
+)
+
+graph.add_edge(
+    "incomplete_request",
     END
 )
 
