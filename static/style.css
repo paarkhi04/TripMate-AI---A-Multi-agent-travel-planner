@@ -98,7 +98,9 @@ body {
 }
 
 .planner-card,
-.result-section {
+.result-section,
+.approval-section,
+.workflow-section {
     background: rgba(15, 23, 42, 0.76);
     border: 1px solid rgba(148, 163, 184, 0.26);
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
@@ -381,6 +383,236 @@ textarea::placeholder {
     font-weight: 800;
 }
 
+
+/* =========================================================
+   WORKFLOW SECTION
+   ========================================================= */
+
+.workflow-section {
+    margin-top: 26px;
+    padding: 24px 28px;
+}
+
+.workflow-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.eyebrow {
+    display: inline-block;
+    color: #a5b4fc;
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 5px;
+}
+
+.workflow-header h2 {
+    font-size: 1.35rem;
+}
+
+.guardrail-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: rgba(34, 197, 94, 0.12);
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    color: #86efac;
+    font-size: 0.8rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.guardrail-badge.blocked {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+}
+
+.supervisor-reasoning {
+    color: #94a3b8;
+    line-height: 1.6;
+    margin-bottom: 16px;
+}
+
+.agent-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.agent-chip {
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(96, 165, 250, 0.25);
+    color: #bfdbfe;
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-transform: capitalize;
+}
+
+
+/* =========================================================
+   HUMAN-IN-THE-LOOP APPROVAL SECTION
+   ========================================================= */
+
+.approval-section {
+    margin-top: 26px;
+    padding: 30px;
+    display: flex;
+    align-items: flex-start;
+    gap: 22px;
+    border: 1px solid rgba(168, 85, 247, 0.38);
+    background:
+        linear-gradient(
+            135deg,
+            rgba(37, 99, 235, 0.12),
+            rgba(124, 58, 237, 0.14)
+        ),
+        rgba(15, 23, 42, 0.82);
+    box-shadow:
+        0 24px 80px rgba(0, 0, 0, 0.35),
+        0 0 45px rgba(124, 58, 237, 0.10);
+}
+
+.approval-icon {
+    width: 54px;
+    height: 54px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 16px;
+    background: linear-gradient(
+        135deg,
+        rgba(37, 99, 235, 0.25),
+        rgba(124, 58, 237, 0.28)
+    );
+    border: 1px solid rgba(147, 197, 253, 0.25);
+    font-size: 1.65rem;
+    box-shadow: 0 12px 30px rgba(37, 99, 235, 0.18);
+}
+
+.approval-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.approval-content h2 {
+    font-size: 1.55rem;
+    margin-bottom: 8px;
+    color: #ffffff;
+}
+
+.approval-content > p {
+    color: #cbd5e1;
+    line-height: 1.65;
+    margin-bottom: 18px;
+}
+
+.feedback-input {
+    min-height: 125px;
+    margin-bottom: 16px;
+    background: rgba(2, 6, 23, 0.68);
+    border-color: rgba(148, 163, 184, 0.28);
+}
+
+.feedback-input:focus {
+    border-color: rgba(168, 85, 247, 0.8);
+    box-shadow:
+        0 0 0 4px rgba(124, 58, 237, 0.16),
+        0 0 30px rgba(124, 58, 237, 0.08);
+}
+
+.approval-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.approve-btn,
+.revise-btn {
+    border: none;
+    border-radius: 14px;
+    padding: 13px 20px;
+    font-size: 0.95rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition:
+        transform 0.25s ease,
+        box-shadow 0.25s ease,
+        opacity 0.25s ease;
+}
+
+.approve-btn {
+    background: linear-gradient(
+        135deg,
+        #16a34a,
+        #22c55e
+    );
+    color: #ffffff;
+    box-shadow:
+        0 12px 30px rgba(34, 197, 94, 0.25);
+}
+
+.approve-btn:hover {
+    transform: translateY(-2px);
+    box-shadow:
+        0 18px 38px rgba(34, 197, 94, 0.35);
+}
+
+.revise-btn {
+    background: linear-gradient(
+        135deg,
+        #2563eb,
+        #7c3aed
+    );
+    color: #ffffff;
+    box-shadow:
+        0 12px 30px rgba(99, 102, 241, 0.25);
+}
+
+.revise-btn:hover {
+    transform: translateY(-2px);
+    box-shadow:
+        0 18px 38px rgba(124, 58, 237, 0.35);
+}
+
+.approve-btn:disabled,
+.revise-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+
+/* =========================================================
+   COMPLETION MESSAGE
+   ========================================================= */
+
+.completion-message {
+    margin-top: 18px;
+    padding: 14px 18px;
+    border-radius: 14px;
+    background: rgba(34, 197, 94, 0.10);
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    color: #86efac;
+    font-weight: 700;
+    line-height: 1.5;
+}
+
+
+/* =========================================================
+   ERROR
+   ========================================================= */
+
 .error-box {
     margin-top: 22px;
     padding: 18px 20px;
@@ -390,6 +622,11 @@ textarea::placeholder {
     color: #fecaca;
     line-height: 1.5;
 }
+
+
+/* =========================================================
+   LOADER
+   ========================================================= */
 
 .loader {
     display: inline-block;
@@ -405,6 +642,11 @@ textarea::placeholder {
     display: none;
 }
 
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
+
 footer {
     text-align: center;
     color: #64748b;
@@ -412,13 +654,24 @@ footer {
     font-size: 0.92rem;
 }
 
+
+/* =========================================================
+   ANIMATION
+   ========================================================= */
+
 @keyframes spin {
     to {
         transform: rotate(360deg);
     }
 }
 
+
+/* =========================================================
+   PRINT
+   ========================================================= */
+
 @media print {
+
     body {
         background: #ffffff;
     }
@@ -427,7 +680,9 @@ footer {
     .hero-section,
     footer,
     .result-actions,
-    #threadInfo {
+    #threadInfo,
+    .workflow-section,
+    .approval-section {
         display: none;
     }
 
@@ -442,13 +697,21 @@ footer {
     }
 }
 
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
 @media (max-width: 760px) {
+
     .app-container {
         padding-top: 34px;
     }
 
     .planner-card,
-    .result-section {
+    .result-section,
+    .approval-section,
+    .workflow-section {
         padding: 20px;
         border-radius: 22px;
     }
@@ -481,5 +744,34 @@ footer {
 
     .pdf-content {
         padding: 20px;
+    }
+
+    .workflow-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .approval-section {
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .approval-icon {
+        width: 48px;
+        height: 48px;
+        font-size: 1.4rem;
+    }
+
+    .approval-content h2 {
+        font-size: 1.3rem;
+    }
+
+    .approval-actions {
+        flex-direction: column;
+    }
+
+    .approve-btn,
+    .revise-btn {
+        width: 100%;
     }
 }

@@ -66,7 +66,7 @@ def _subprocess_env(**updates: str | None) -> dict[str, str]:
 # =========================================================
 
 llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
+    model="openai/gpt-oss-120b",
     api_key=_require_env("GROQ_API_KEY", GROQ_API_KEY),
 )
 
@@ -89,6 +89,8 @@ client = MultiServerMCPClient(
             "transport": "stdio",
             "command": UVX_COMMAND,
             "args": [
+                "--with",
+                "mcp<2",
                 "aviationstack-mcp",
             ],
             "env": _subprocess_env(
